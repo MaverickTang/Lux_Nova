@@ -59,3 +59,22 @@ Lux Nova 的流畅与惊艳，建立在严谨的数学模型、底层绘图 API 
 1. 克隆本项目：
    ```bash
    git clone [https://github.com/YourUsername/Lux_Nova.git](https://github.com/YourUsername/Lux_Nova.git)
+
+2. 使用 Xcode 打开 Mindflow.xcodeproj。
+3. 配置 API Key：
+   * 项目默认集成了硅基流动 (SiliconFlow) 的 DeepSeek 模型端点。
+     * 方法 A：直接在 App 的“系统设置” UI 中填入你的 API Key。
+      * 方法 B：在代码 LLMService.swift 中修改默认的回退 Key 或端点（也支持替换为本地 LM Studio / Ollama 的 http://127.0.0.1:1234/v1 端点实现完全断网运行）。
+      * 选择你的 iPhone 设备，点击 Run (⌘+R) 编译并在真机上运行。
+
+### 🗺 未来路线图 (Roadmap)
+[ ] SwiftData & iCloud 同步：重构底层存储，实现跨设备的秒级静默同步。
+[ ] 星系折叠聚类：支持 100+ 节点时的宏观星座视角与微观图谱视角的无缝缩放。
+[ ] 矛盾侦测引擎：AI 主动寻找并高亮历史思维中的逻辑冲突。
+[ ] VisionOS 空间计算版：在 3D 空间中用手势拨弄发光的思维粒子。
+
+### 🤝 贡献与反馈 (Contributing)
+如果你对认知心理学、知识图谱构建、SwiftUI 高性能渲染或是大模型应用感兴趣，非常欢迎提交 Pull Request 或开 Issue 讨论！
+
+### 📄 许可证 (License)
+本项目采用 MIT License 开源许可证。
