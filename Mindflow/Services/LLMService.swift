@@ -76,30 +76,56 @@ class LLMService {
             if apiKey.isEmpty && !isLocalHost {
                 throw LLMError.apiError("请先在设置中配置 API Key。")
             }
-            
             let systemPrompt = """
                         你是一个顶级的认知心理学分析系统。你的任务是分析用户的“自言自语”或思维碎片，从中提取出思考的路径，并将其转化为结构化的 JSON 图数据。
                         
                         【规则】
                         1. 识别用户的核心议题(topic)、主要观点(idea)、面临的痛点(problem)、解决方案(solution)或优缺点(pros/cons)。
-                        2. 梳理这些节点之间的因果、转折或递进关系。
-                        3. 选出一条核心推导链路，将其 isMainline 设为 true；旁支发散思维设为 false。
-                        4. 根据用户的全段内容，提炼出一段100字以内的核心摘要(summary)。
-                        5. 【极度重要】无论用户输入什么语言，你生成的全部内容（包括 topic, summary, label, detail, relation 等）必须使用 \(llmTargetLanguage) 语种输出！！！
-                        6. 最终输出必须且只能是合法的 JSON 格式。千万不要包含任何额外的解释文本。
+                        2. 梳理这些节点之间的逻辑关系。你必须构建一个**网状结构**，而不仅仅是单行线。
+                        3. 选出一条核心推导链路，将其 isMainline 设为 true。
+                        4. 【极其重要】除了主线，你**必须**从文本中提取出发散思维、补充说明或延伸思考，将其 isMainline 设为 false，并将它们作为旁支连接到相关的主线节点上。不要只生成一条直线！
+                        5. 根据用户的全段内容，提炼出一段100字以内的核心摘要(summary)。
+                        6. 【极度重要】无论用户输入什么语言，你生成的全部内容（包括 topic, summary, label, detail, relation 等）必须使用 \(llmTargetLanguage) 语种输出！！！
+                        7. 最终输出必须且只能是合法的 JSON 格式。千万不要包含任何额外的解释文本。
                         
-                        【JSON 格式约束】
+                        【JSON 格式约束样例（请严格遵循键名，并同时包含主线与发散节点）】
                         {
                           "topic": "核心议题的简短提炼",
                           "summary": "100字以内的核心内容摘要",
                           "nodes": [
-                            { "id": "1", "label": "简短词汇", "type": "problem/solution/idea/pros", "detail": "一句话解释", "isMainline": true }
+                            { "id": "1", "label": "核心起点", "type": "problem", "detail": "主线思考的起点", "isMainline": true },
+                            { "id": "2", "label": "推导结果", "type": "solution", "detail": "主线思考的结论", "isMainline": true },
+                            { "id": "3", "label": "发散联想", "type": "idea", "detail": "由起点引发的旁支思考", "isMainline": false }
                           ],
                           "edges": [
-                            { "source": "1", "target": "2", "relation": "导致/启发/转折" }
+                            { "source": "1", "target": "2", "relation": "推导出" },
+                            { "source": "1", "target": "3", "relation": "联想到" }
                           ]
                         }
                         """
+//            let systemPrompt = """
+//                        你是一个顶级的认知心理学分析系统。你的任务是分析用户的“自言自语”或思维碎片，从中提取出思考的路径，并将其转化为结构化的 JSON 图数据。
+//                        
+//                        【规则】
+//                        1. 识别用户的核心议题(topic)、主要观点(idea)、面临的痛点(problem)、解决方案(solution)或优缺点(pros/cons)。
+//                        2. 梳理这些节点之间的因果、转折或递进关系。
+//                        3. 选出一条核心推导链路，将其 isMainline 设为 true；旁支发散思维设为 false。
+//                        4. 根据用户的全段内容，提炼出一段100字以内的核心摘要(summary)。
+//                        5. 【极度重要】无论用户输入什么语言，你生成的全部内容（包括 topic, summary, label, detail, relation 等）必须使用 \(llmTargetLanguage) 语种输出！！！
+//                        6. 最终输出必须且只能是合法的 JSON 格式。千万不要包含任何额外的解释文本。
+//                        
+//                        【JSON 格式约束】
+//                        {
+//                          "topic": "核心议题的简短提炼",
+//                          "summary": "100字以内的核心内容摘要",
+//                          "nodes": [
+//                            { "id": "1", "label": "简短词汇", "type": "problem/solution/idea/pros", "detail": "一句话解释", "isMainline": true }
+//                          ],
+//                          "edges": [
+//                            { "source": "1", "target": "2", "relation": "导致/启发/转折" }
+//                          ]
+//                        }
+//                        """
             
             
             let parameters: [String: Any] = [
@@ -241,7 +267,7 @@ class LLMService {
                     ["role": "system", "content": systemPrompt],
                     ["role": "user", "content": "当前图谱状态：\n\(String(data: contextJSON, encoding: .utf8)!)\n\n用户的语音指令：\n“\(command)”"]
                 ],
-                "temperature": 0.1,
+                "temperature": temperature,
                 "response_format": ["type": "json_object"]
             ]
             

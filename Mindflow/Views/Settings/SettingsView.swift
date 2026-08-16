@@ -15,7 +15,7 @@ struct SettingsView: View {
     @AppStorage("llm_endpoint_url") private var endpointURL: String = "https://api.siliconflow.cn/v1/chat/completions"
     @AppStorage("llm_model_name") private var modelName: String = "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"
     // 【新增】大模型热度 (创造力)
-    @AppStorage("llm_temperature") private var temperature: Double = 0.3
+    @AppStorage("llm_temperature") private var temperature: Double = 0.5
     
     // 物理引擎参数
     @AppStorage("physics_repulsion") private var repulsionForce: Double = 4000.0
