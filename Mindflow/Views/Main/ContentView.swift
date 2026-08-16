@@ -53,14 +53,13 @@ struct ContentView: View {
         .fullScreenCover(item: $recorder.completedResult) { result in
                 RecordingResultView(result: result, background: background) { jsonString, transcript in
                         // 【修改】获取音频文件名和时长，一并保存
-                        let fileName = result.audioURL.lastPathComponent
-                        HistoryManager.shared.saveThought(
-                            transcript: transcript,
-                            graphJSON: jsonString,
-                            audioFileName: fileName,
-                            duration: result.duration
-                        )
-                        
+//                        let fileName = result.audioURL.lastPathComponent
+//                        HistoryManager.shared.saveThought(
+//                            transcript: transcript,
+//                            graphJSON: jsonString,
+//                            audioFileName: fileName,
+//                            duration: result.duration
+//                        )
                         self.generatedGraphJSON = jsonString
                         
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {

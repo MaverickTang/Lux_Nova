@@ -146,12 +146,20 @@ struct HistoryView: View {
                 .onAppear {
                     viewModel.updateThoughts(manager.savedThoughts, size: geometry.size)
                     viewModel.startPhysicsEngine(thoughts: manager.savedThoughts, edges: manager.historyEdges)
-                    // 【关键】每次打开时触发增量同步
-                    Task { await manager.syncNewThoughtsConnections() }
+                    // 已经被移到 HistoryManager 的 saveThought 里了
+//                    Task { await manager.syncNewThoughtsConnections() }
                 }
                 .onDisappear { viewModel.stopPhysicsEngine() }
                 .onChange(of: geometry.size) { _, newSize in viewModel.updateThoughts(manager.savedThoughts, size: newSize) }
-                .onChange(of: manager.savedThoughts.count) { _ in viewModel.updateThoughts(manager.savedThoughts, size: geometry.size) }
+                .onChange(of: manager.savedThoughts.count) { _ in
+                    viewModel.updateThoughts(manager.savedThoughts, size: geometry.size)
+                }
+                // 【核心修复】当后台增量分析完成，更新了 historyEdges 时，强制重启物理引擎来绘制新连线！
+                .onChange(of: manager.historyEdges) { _ in
+                    viewModel.stopPhysicsEngine()
+                    viewModel.startPhysicsEngine(thoughts: manager.savedThoughts, edges: manager.historyEdges)
+                }
+//                .onChange(of: manager.savedThoughts.count) { _ in viewModel.updateThoughts(manager.savedThoughts, size: geometry.size) }*/
             }
             .navigationTitle("意识星海")
             .navigationBarTitleDisplayMode(.inline)

@@ -165,14 +165,21 @@ struct RecordingResultView: View {
 
         Task {
             do {
-                let jsonResult = try await LLMService.shared.generateThoughtGraph(from: editableTranscript)
+                // 【核心修改】直接调用我们刚写好的打包方法
+                // 此时黑洞动画正在播放，大模型会在这段时间内同时完成“生成图谱”和“增量连线”
+                let fileName = result.audioURL.lastPathComponent
+                let jsonResult = try await HistoryManager.shared.processAndSaveNewThought(
+                    transcript: editableTranscript,
+                    audioFileName: fileName,
+                    duration: result.duration
+                )
 
-                await MainActor.run {
-                    isGenerating = false
+            await MainActor.run {
+                isGenerating = false
                     player.stop()
                     onGenerate(jsonResult, editableTranscript)
                     dismiss()
-                }
+                    }
             } catch {
                 await MainActor.run {
                     isGenerating = false

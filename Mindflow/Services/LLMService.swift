@@ -103,30 +103,6 @@ class LLMService {
                           ]
                         }
                         """
-//            let systemPrompt = """
-//                        你是一个顶级的认知心理学分析系统。你的任务是分析用户的“自言自语”或思维碎片，从中提取出思考的路径，并将其转化为结构化的 JSON 图数据。
-//                        
-//                        【规则】
-//                        1. 识别用户的核心议题(topic)、主要观点(idea)、面临的痛点(problem)、解决方案(solution)或优缺点(pros/cons)。
-//                        2. 梳理这些节点之间的因果、转折或递进关系。
-//                        3. 选出一条核心推导链路，将其 isMainline 设为 true；旁支发散思维设为 false。
-//                        4. 根据用户的全段内容，提炼出一段100字以内的核心摘要(summary)。
-//                        5. 【极度重要】无论用户输入什么语言，你生成的全部内容（包括 topic, summary, label, detail, relation 等）必须使用 \(llmTargetLanguage) 语种输出！！！
-//                        6. 最终输出必须且只能是合法的 JSON 格式。千万不要包含任何额外的解释文本。
-//                        
-//                        【JSON 格式约束】
-//                        {
-//                          "topic": "核心议题的简短提炼",
-//                          "summary": "100字以内的核心内容摘要",
-//                          "nodes": [
-//                            { "id": "1", "label": "简短词汇", "type": "problem/solution/idea/pros", "detail": "一句话解释", "isMainline": true }
-//                          ],
-//                          "edges": [
-//                            { "source": "1", "target": "2", "relation": "导致/启发/转折" }
-//                          ]
-//                        }
-//                        """
-            
             
             let parameters: [String: Any] = [
                 "model": modelName,
@@ -191,50 +167,66 @@ class LLMService {
         func generateIncrementalGraph(newThoughts: [SavedThought], allThoughts: [SavedThought]) async throws -> [HistoryEdge] {
             guard let url = URL(string: endpointURL) else { throw LLMError.invalidURL }
             
-            let allDict = allThoughts.map { ["id": $0.id.uuidString, "topic": $0.topic, "summary": $0.summary ?? "无"] }
-            let newDict = newThoughts.map { ["id": $0.id.uuidString, "topic": $0.topic] }
+//            let allDict = allThoughts.map { ["id": $0.id.uuidString, "topic": $0.topic, "summary": $0.summary ?? "无"] }
+//            let newDict = newThoughts.map { ["id": $0.id.uuidString, "topic": $0.topic] }
+            // 【修复 1】过滤出真正的“旧节点”，避免大模型把新节点自己跟自己连起来导致逻辑崩溃
+            let oldThoughts = allThoughts.filter { old in !newThoughts.contains(where: { $0.id == old.id }) }
+                    
+            // 【修复 2】提取字典时，把新旧节点的 summary 毫无保留地全传给大模型！
+            let oldDict = oldThoughts.map { ["id": $0.id.uuidString, "topic": $0.topic, "summary": $0.summary ?? "无摘要"] }
+            let newDict = newThoughts.map { ["id": $0.id.uuidString, "topic": $0.topic, "summary": $0.summary ?? "无摘要"] }
             
-            let allJSON = String(data: try! JSONSerialization.data(withJSONObject: allDict), encoding: .utf8) ?? ""
+            let oldJSON = String(data: try! JSONSerialization.data(withJSONObject: oldDict), encoding: .utf8) ?? ""
             let newJSON = String(data: try! JSONSerialization.data(withJSONObject: newDict), encoding: .utf8) ?? ""
-            
+//            let allJSON = String(data: try! JSONSerialization.data(withJSONObject: allDict), encoding: .utf8) ?? ""
+//            let newJSON = String(data: try! JSONSerialization.data(withJSONObject: newDict), encoding: .utf8) ?? ""
+//            
             let systemPrompt = """
-            你是一个知识图谱专家。用户现有一个星系图（包含主题和摘要）。现在有几个【新想法】加入。
-            请仔细判断这些【新想法】与星系图中的【所有想法】之间是否有深层逻辑联系。
+                    你是一个知识图谱专家。
+                    请仔细阅读【本次新增想法】与【已有星系图想法】，判断它们之间是否存在逻辑联系。
+                    
+                    规则：
+                    1. 仅寻找【新增想法】和【已有想法】之间的联系。绝不改变现有连线！
+                    2. 【极其重要】除了强因果关系，如果两个节点探讨的是同一话题的不同侧面、相似的项目、或者存在灵感上的递进（例如两个节点都在谈论“软件开发”或“同一个地点/项目”），尤其如果存在节点间的关键词重复，你**必须**将它们连接起来。
+                    3. relation 字段用2-4个字概括（如：功能延伸、同类项目、灵感补充、迭代思考、日程关联）。
+                    4. 只输出合法 JSON。
+                    5. 无论用户输入什么语言，你生成的全部内容必须使用 \(llmTargetLanguage) 语种输出！！！
+                    
+                    【输出格式样例】
+                    {
+                      "edges": [ 
+                        { "source": "新增想法的ID", "target": "已有想法的ID", "relation": "灵感递进" }
+                      ]
+                    }
+                    """
             
-            规则：
-            1. 绝不改变现有连线！你只需输出**新增加的连线 (edges)**。
-            2. 仅寻找同属一个核心项目或强因果相关的节点。如果不相关，不要强行连线。
-            3. relation 字段用2-4个字概括（如：功能延伸、反面思考、灵感补充）。
-            4. 只输出合法 JSON。
-            5. 【极度重要】无论用户输入什么语言，你生成的全部内容（包括 topic, summary, label, detail, relation 等）必须使用 \(llmTargetLanguage) 语种输出！！！
-            
-            【输出格式】
-            {
-              "edges": [ { "source": "源ID", "target": "目标ID", "relation": "关系" } ]
-            }
-            """
             
             let parameters: [String: Any] = [
-                "model": modelName,
-                "messages": [
-                    ["role": "system", "content": systemPrompt],
-                    ["role": "user", "content": "星系图全集：\n\(allJSON)\n\n本次新增想法：\n\(newJSON)"]
-                ],
-                "temperature": temperature, // 【修改】使用用户设置的热度
-                "response_format": ["type": "json_object"]
-            ]
-            
-            var request = URLRequest(url: url); request.httpMethod = "POST"; request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization"); request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONSerialization.data(withJSONObject: parameters)
-            
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else { throw LLMError.apiError("网络错误") }
-            
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any], let choices = json["choices"] as? [[String: Any]], let msg = choices.first?["message"] as? [String: Any], let content = msg["content"] as? String {
-                if let resultData = cleanJSONString(content).data(using: .utf8), let decoded = try? JSONDecoder().decode([String: [HistoryEdge]].self, from: resultData), let edges = decoded["edges"] {
-                    return edges
-                }
-            }
-            return []
+                        "model": modelName,
+                        "messages": [
+                            ["role": "system", "content": systemPrompt],
+                            ["role": "user", "content": "已有星系图想法：\n\(oldJSON)\n\n本次新增想法：\n\(newJSON)"]
+                        ],
+                        // 【修复 3】动态提高温度，让模型在增量时具备更强的发散和联想能力
+                        "temperature": min(temperature + 0.2, 0.8),
+                        "response_format": ["type": "json_object"]
+                    ]
+                    
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: parameters)
+                    
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else { throw LLMError.apiError("网络错误") }
+                    
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any], let choices = json["choices"] as? [[String: Any]], let msg = choices.first?["message"] as? [String: Any], let content = msg["content"] as? String {
+                        if let resultData = cleanJSONString(content).data(using: .utf8), let decoded = try? JSONDecoder().decode([String: [HistoryEdge]].self, from: resultData), let edges = decoded["edges"] {
+                            return edges
+                        }
+                    }
+                    return []
         }
         
         /// 2. 语音直接指挥修改星系

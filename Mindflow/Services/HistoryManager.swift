@@ -32,6 +32,44 @@ class HistoryManager: ObservableObject {
         load()
         loadEdges()
     }
+    
+    // 【全新架构】将生成图谱、保存节点、同步连线三个动作打包
+        func processAndSaveNewThought(transcript: String, audioFileName: String?, duration: TimeInterval?) async throws -> String {
+            // 1. 第一波大模型请求：生成单次思维图谱
+            let graphJSON = try await LLMService.shared.generateThoughtGraph(from: transcript)
+            
+            // 2. 解析并提取 Topic 和 Summary
+            var extractedTopic = "未命名意识"
+            var extractedSummary = "暂无摘要"
+            
+            if let data = graphJSON.data(using: .utf8), let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let topic = dict["topic"] as? String { extractedTopic = topic }
+                if let summary = dict["summary"] as? String { extractedSummary = summary }
+            }
+            
+            let newThought = SavedThought(
+                date: Date(),
+                topic: extractedTopic,
+                summary: extractedSummary,
+                transcript: transcript,
+                graphJSON: graphJSON,
+                audioFileName: audioFileName,
+                duration: duration,
+                isAnalyzedForLinks: false // 标记为未分析
+            )
+            
+            // 3. 在主线程安全地将新节点存入本地
+            await MainActor.run {
+                self.savedThoughts.insert(newThought, at: 0)
+                self.save()
+            }
+            
+            // 4. 第二波大模型请求：趁着 UI 还在播放黑洞加载动画，立即强行同步星系连线！
+            await self.syncNewThoughtsConnections()
+            
+            // 5. 两次请求全部大功告成，返回 JSON 供 UI 跳转到单次图谱界面
+            return graphJSON
+        }
 
     func saveThought(transcript: String, graphJSON: String, audioFileName: String?, duration: TimeInterval?) {
         var extractedTopic = "未命名意识"
@@ -55,6 +93,12 @@ class HistoryManager: ObservableObject {
         
         savedThoughts.insert(newThought, at: 0)
         save()
+        
+        // 【核心修复】保存完毕后，立即在后台启动增量连线分析！
+        // 而不是等到用户打开 HistoryView 才去算。
+        Task {
+            await syncNewThoughtsConnections()
+        }
     }
     
     // 【新增】修改节点名称
