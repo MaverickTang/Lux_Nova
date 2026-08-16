@@ -198,9 +198,9 @@ private struct ResultHeader: View {
 
     var body: some View {
         HStack {
-            Text("∅")
-                .font(.system(size: 27, weight: .light, design: .serif))
-                .foregroundStyle(Color.white.opacity(0.6))
+//            Text("∅")
+//                .font(.system(size: 27, weight: .light, design: .serif))
+//                .foregroundStyle(Color.white.opacity(0.6))
 
             Spacer()
 
