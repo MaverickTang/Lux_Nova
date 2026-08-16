@@ -10,33 +10,9 @@
 		983516BA2FDD2F0B002F93B4 /* Mindflow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mindflow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		98F27A07303063A5008C5F22 /* Exceptions for "Mindflow" folder in "Mindflow" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				ThoughtGraphView_for_save.txt,
-			);
-			target = 983516B92FDD2F0B002F93B4 /* Mindflow */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		98F27A08303063A5008C5F22 /* Exceptions for "Mindflow" folder in "Compile Sources" phase from "Mindflow" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = 983516B62FDD2F0B002F93B4 /* Sources */;
-			membershipExceptions = (
-				ThoughtGraphView_for_save.txt,
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		983516BC2FDD2F0B002F93B4 /* Mindflow */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				98F27A07303063A5008C5F22 /* Exceptions for "Mindflow" folder in "Mindflow" target */,
-				98F27A08303063A5008C5F22 /* Exceptions for "Mindflow" folder in "Compile Sources" phase from "Mindflow" target */,
-			);
 			path = Mindflow;
 			sourceTree = "<group>";
 		};

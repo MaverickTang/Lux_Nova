@@ -12,6 +12,9 @@ import SwiftUI
 struct MindflowApp: App {
     var body: some Scene {
         WindowGroup {
+            // 临时将入口改为 VortexTestView 以便测试
+//            VortexTestView()
+            
             ContentView()
         }
     }

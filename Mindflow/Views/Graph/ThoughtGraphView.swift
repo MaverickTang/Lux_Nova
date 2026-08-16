@@ -413,7 +413,7 @@ struct ThoughtGraphView: View {
                 .onDisappear {
                     viewModel.stopPhysicsEngine()
                 }
-                .onChange(of: geometry.size) { newSize in
+                .onChange(of: geometry.size) { _, newSize in
                     viewModel.updateSkeleton(size: newSize)
                 }
             }
