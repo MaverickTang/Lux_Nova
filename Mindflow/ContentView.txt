@@ -1,0 +1,356 @@
+
+struct ContentView: View {
+    @StateObject private var recorder = SpeechRecorder()
+    @State private var compression = false
+    @State private var expandGlow = false
+
+    @State private var showThoughtGraph = false
+    @State private var showSettings = false // [新增] 控制设置界面的显示
+    @State private var showHistory = false  // [新增] 控制历史界面的显示
+    
+    // 录音计时器状态
+    @State private var recordingDuration: TimeInterval = 0
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    // 背景色调整为更适合暗色云团的极简浅灰白
+    private let background = Color(red: 0.95, green: 0.95, blue: 0.94)
+
+    var body: some View {
+        GeometryReader { geometry in
+            let safeArea = geometry.safeAreaInsets
+
+            ZStack {
+                background.ignoresSafeArea()
+
+                AmbientNoise()
+                    .opacity(0.15)
+                    .ignoresSafeArea()
+
+                // 中心主交互区
+                VStack(spacing: 24) {
+                    // 将核心云团包装为按钮
+                    Button(action: toggleRecording) {
+                        TDParticleSphere(
+                            isRecording: recorder.isRecording,
+                            audioLevel: recorder.audioLevel,
+                            compression: compression,
+                            expandGlow: expandGlow
+                        )
+                        .frame(
+                            width: min(geometry.size.width * 0.85, 400),
+                            height: min(geometry.size.width * 0.85, 400)
+                        )
+                        .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // 状态提示与计时器
+                    ZStack {
+                        if recorder.isRecording {
+                            Text(timeString(recordingDuration))
+                                .font(.system(size: 16, weight: .medium, design: .monospaced))
+                                .foregroundColor(Color.black.opacity(0.6))
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        } else {
+                            Text("点击开始记录")
+                                .font(.system(size: 14, weight: .light, design: .serif))
+                                .foregroundColor(Color.black.opacity(0.4))
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.3), value: recorder.isRecording)
+                }
+
+                // 底部角落的次要操作入口
+                VStack {
+                    Spacer()
+                    HStack(alignment: .bottom) {
+                        // 左下角：历史记录
+                        Button(action: { showHistory = true }) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundColor(Color.black.opacity(0.4))
+                                .padding(16)
+                                .contentShape(Rectangle())
+                        }
+                        
+                        Spacer()
+                        
+                        // 右下角：设置
+                        Button(action: { showSettings = true }) {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundColor(Color.black.opacity(0.4))
+                                .padding(16)
+                                .contentShape(Rectangle())
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, max(16, safeArea.bottom))
+                }
+            }
+        }
+        // 计时器逻辑
+        .onReceive(timer) { _ in
+            if recorder.isRecording {
+                recordingDuration += 1
+            }
+        }
+        .onChange(of: recorder.isRecording) { isRecording in
+            if !isRecording {
+                recordingDuration = 0
+            }
+        }
+        .fullScreenCover(item: $recorder.completedResult) { result in
+            // 录制结束后，在这里处理结果，并决定是否要静默生成图谱
+            RecordingResultView(result: result, background: background)
+        }
+        .sheet(isPresented: $showThoughtGraph) {
+            ThoughtGraphView()
+        }
+        // 预留的设置和历史界面 Sheet
+        .sheet(isPresented: $showSettings) {
+            Text("设置界面预留 (API Key, 界面调整)")
+        }
+        .sheet(isPresented: $showHistory) {
+            Text("历史记录界面预留 (光团列表)")
+        }
+    }
+
+    private func toggleRecording() {
+        crispTap(intensity: recorder.isRecording ? 0.45 : 0.72)
+        Task {
+            await recorder.toggleRecording()
+        }
+    }
+
+    private func crispTap(intensity: CGFloat, sharpness: CGFloat = 0.95) {
+        let generator = UIImpactFeedbackGenerator(style: .rigid)
+        generator.prepare()
+        generator.impactOccurred(intensity: intensity)
+
+        if sharpness > 0.96 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.045) {
+                let secondTap = UIImpactFeedbackGenerator(style: .light)
+                secondTap.prepare()
+                secondTap.impactOccurred(intensity: 0.35)
+            }
+        }
+    }
+    
+    private func timeString(_ interval: TimeInterval) -> String {
+        let totalSeconds = max(0, Int(interval.rounded()))
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return "\(String(format: "%02d", minutes)):\(String(format: "%02d", seconds))"
+    }
+}
+
+// MARK: - TD 风格 3D 流体粒子球 (Lux Nova 优化版)
+private struct TDParticleSphere: View {
+    let isRecording: Bool
+    let audioLevel: CGFloat
+    let compression: Bool
+    let expandGlow: Bool
+
+    @State private var baseParticles: [(x: Double, y: Double, z: Double)] = []
+    
+    // 提升至 2500 个点，实现 TD 般的绵密粒子感
+    private let particleCount = 2500
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                
+                let easedLevel = pow(max(0.02, min(audioLevel, 1)), 0.5)
+                let baseRadius = min(size.width, size.height) * (isRecording ? 0.32 : 0.28)
+                let radius = baseRadius * (1 + easedLevel * 0.15) * (compression ? 0.85 : 1)
+                
+                // --- 1. 绘制暗核背景 (解决正方形阴影) ---
+                // 使用原生的径向渐变，无需任何 blur，自然过渡到透明边缘
+                let coreOpacity = isRecording ? 0.95 : 0.8
+                let gradient = Gradient(colors: [
+                    Color(red: 0.05, green: 0.06, blue: 0.08).opacity(coreOpacity),
+                    Color(red: 0.05, green: 0.06, blue: 0.08).opacity(0.0)
+                ])
+                // 直接在 fill 方法中使用 .radialGradient 简写
+                context.fill(
+                    Path(ellipseIn: CGRect(x: 0, y: 0, width: size.width, height: size.height)),
+                    with: .radialGradient(
+                        gradient,
+                        center: center,
+                        startRadius: radius * 0.4,
+                        endRadius: radius * 1.5
+                    )
+                )
+
+                // --- 2. 准备粒子绘制环境 ---
+                // 开启高亮叠加模式，粒子密集的地方会自动爆亮形成 bloom 效果
+                context.blendMode = .screen
+                
+                // 动画驱动参数
+                let rotationSpeed = elapsed * (isRecording ? 0.35 : 0.1)
+                let noiseTime = elapsed * (isRecording ? 1.5 : 0.5)
+                let noiseAmplitude = isRecording ? (0.2 + Double(easedLevel) * 0.5) : 0.1
+                
+                // 将部分三角函数提取到循环外，优化 2500 个点的运算性能
+                let cosY = cos(rotationSpeed)
+                let sinY = sin(rotationSpeed)
+                let cosX = cos(rotationSpeed * 0.7)
+                let sinX = sin(rotationSpeed * 0.7)
+
+                // --- 3. 核心粒子循环 ---
+                for particle in baseParticles {
+                    // 1) 3D 旋转计算
+                    let rx = particle.x * cosY + particle.z * sinY
+                    var ry = particle.y
+                    let rz = -particle.x * sinY + particle.z * cosY
+
+                    let finalY = ry * cosX - rz * sinX
+                    let finalZ = ry * sinX + rz * cosX
+                    ry = finalY
+                    
+                    // 2) 流体噪声扰动 (TD的 feedback+noise 逻辑)
+                    let nx = sin(ry * 3.1 + noiseTime) * cos(finalZ * 2.7 - noiseTime)
+                    let ny = sin(rx * 3.5 - noiseTime) * cos(rx * 2.1 + noiseTime)
+                    let nz = sin(rx * 2.8 + noiseTime) * cos(ry * 3.3 - noiseTime)
+                    
+                    let dx = rx + nx * noiseAmplitude
+                    let dy = ry + ny * noiseAmplitude
+                    let dz = finalZ + nz * noiseAmplitude
+
+                    // 3) 归一化限制在球面上
+                    let length = sqrt(dx * dx + dy * dy + dz * dz)
+                    let cx = (dx / length) * radius
+                    let cy = (dy / length) * radius
+                    let cz = (dz / length) * radius
+
+                    // 4) 深度检测 (背面剔除)
+                    // (cz + radius)/(2*radius) 的范围是 0(最前) 到 1(最后)
+                    let depthFactor = (cz + radius) / (2 * radius)
+                    
+                    // 核心优化：隐藏球体背面的粒子，不产生混叠干扰
+                    if depthFactor > 0.6 { continue }
+
+                    // 5) 透视投影到 2D 屏幕
+                    let focalLength: Double = 800.0
+                    let perspectiveScale = focalLength / (focalLength + cz)
+                    let screenX = center.x + cx * perspectiveScale
+                    let screenY = center.y + cy * perspectiveScale
+
+                    // 6) 计算透明度、尺寸与冷白蓝色系
+                    let opacity = (1.0 - (depthFactor / 0.6)) * (isRecording ? 0.7 : 0.4)
+                    let dotSize = max(0.6, (1.0 - depthFactor) * (isRecording ? 3.5 : 2.0))
+
+                    let particleColor = Color(
+                        red: 0.45,
+                        green: 0.65,
+                        blue: 0.95
+                    ).opacity(opacity)
+
+                    // 7) 执行绘制
+                    let rect = CGRect(
+                        x: screenX - dotSize / 2,
+                        y: screenY - dotSize / 2,
+                        width: dotSize,
+                        height: dotSize
+                    )
+                    
+                    var path = Path()
+                    path.addEllipse(in: rect)
+                    context.fill(path, with: .color(particleColor))
+                }
+            }
+        }
+        .onAppear {
+            if baseParticles.isEmpty {
+                baseParticles = Self.generateFibonacciSphere(count: particleCount)
+            }
+        }
+    }
+
+    private static func generateFibonacciSphere(count: Int) -> [(Double, Double, Double)] {
+        var points: [(Double, Double, Double)] = []
+        let phi = .pi * (3.0 - sqrt(5.0))
+
+        for i in 0..<count {
+            let y = 1.0 - (Double(i) / Double(count - 1)) * 2.0
+            let r = sqrt(1.0 - y * y)
+            let theta = phi * Double(i)
+
+            let x = cos(theta) * r
+            let z = sin(theta) * r
+            points.append((x, y, z))
+        }
+        return points
+    }
+}
+
+    private func drawBlob(
+        in context: inout GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat,
+        color: Color,
+        seed: TimeInterval
+    ) {
+        var path = Path()
+        let points = 18
+
+        for index in 0...points {
+            let progress = CGFloat(index) / CGFloat(points)
+            let angle = progress * 2 * .pi
+            let ripple = 1
+                + CGFloat(sin(seed * 1.37 + Double(index) * 0.82)) * 0.09
+                + CGFloat(cos(seed * 0.91 + Double(index) * 1.71)) * 0.055
+            let pointRadius = radius * ripple
+            let point = CGPoint(
+                x: center.x + cos(angle) * pointRadius,
+                y: center.y + sin(angle) * pointRadius * 0.86
+            )
+
+            if index == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+
+        path.closeSubpath()
+        context.fill(path, with: .color(color))
+    }
+
+
+// MARK: - 背景噪点 (保留质感)
+private struct AmbientNoise: View {
+    private let specks = (0..<260).map { index in
+        NoiseSpeck(
+            x: Double((index * 47) % 101) / 100,
+            y: Double((index * 83) % 103) / 102,
+            opacity: Double((index * 19) % 29) / 100 + 0.02
+        )
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            for speck in specks {
+                let rect = CGRect(
+                    x: speck.x * size.width,
+                    y: speck.y * size.height,
+                    width: 1.5,
+                    height: 1.5
+                )
+                context.opacity = speck.opacity
+                context.fill(Path(ellipseIn: rect), with: .color(.black))
+            }
+        }
+        .blendMode(.multiply)
+    }
+}
+
+private struct NoiseSpeck {
+    let x: Double
+    let y: Double
+    let opacity: Double
+}
